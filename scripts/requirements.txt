@@ -1,0 +1,6 @@
+Adafruit-DHT==1.4.0
+paho-mqtt==1.6.1
+requests==2.31.0
+lxml==4.9.3
+RPi.GPIO==0.7.1
+smbus==1.1.post2 

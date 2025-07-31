@@ -1,0 +1,688 @@
+[
+    {
+        "id": "main_flow_tab",
+        "type": "tab",
+        "label": "MÉTÉO Équipe 05 ",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "sensor_timer",
+        "type": "inject",
+        "z": "main_flow_tab",
+        "name": "Interval 3s",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "timestamp",
+                "v": "",
+                "vt": "date"
+            }
+        ],
+        "repeat": "3",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 2,
+        "topic": "",
+        "payload": "SENSOR_SCAN",
+        "payloadType": "str",
+        "x": 120,
+        "y": 100,
+        "wires": [
+            [
+                "sensor_exec"
+            ]
+        ]
+    },
+    {
+        "id": "sensor_exec",
+        "type": "exec",
+        "z": "main_flow_tab",
+        "command": "cd /home/gti700lab/Lab3/scripts && python3 read_sensor.py",
+        "addpay": "",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "",
+        "winHide": false,
+        "oldrc": false,
+        "name": "DHT11",
+        "x": 320,
+        "y": 100,
+        "wires": [
+            [
+                "debug_raw",
+                "data_processor"
+            ],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "debug_raw",
+        "type": "debug",
+        "z": "main_flow_tab",
+        "name": " Data Monitor",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 610,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "data_processor",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Data Processor",
+        "func": "if (msg.payload && typeof msg.payload === 'string') {\n    const cleanData = msg.payload.trim().replace(/\\r?\\n|\\r/g, '');\n    const values = cleanData.split(',');\n    \n    if (values.length === 2 && values[0] !== 'ERROR' && values[0] !== '') {\n        let temperature = parseFloat(values[0].trim());\n        let humidity = parseFloat(values[1].trim());\n        \n        if (isNaN(temperature) || isNaN(humidity)) {\n            node.error(\"ERREUR: Données capteur invalides\");\n            return null;\n        }\n        \n        const dataHistory = context.get('History') || [];\n        if (dataHistory.length > 0) {\n            const lastReading = dataHistory[dataHistory.length - 1];\n            const tempDrift = Math.abs(temperature - lastReading.temp);\n            const humidDrift = Math.abs(humidity - lastReading.hum);\n            \n            if (tempDrift > 15 || humidDrift > 25) {\n                temperature = (temperature * 0.3 + lastReading.temp * 0.7);\n                humidity = (humidity * 0.3 + lastReading.hum * 0.7);\n                node.warn(`Correction: T=${temperature.toFixed(1)}, H=${humidity.toFixed(1)}`);\n            }\n        }\n        \n        dataHistory.push({ temp: temperature, hum: humidity, timestamp: Date.now() });\n        if (dataHistory.length > 10) dataHistory.shift();\n        context.set('History', dataHistory);\n        \n        const T = temperature.toFixed(1);\n        const H = humidity.toFixed(1);\n        \n        const dataWeather = {\n            temperature: T,\n            humidity: H,\n            timestamp: new Date().toISOString(),\n            processed: true,\n            team: '05',\n            source: 'DHT11'\n        };\n        \n        flow.set(\"localSensorData\", dataWeather);\n        \n        const baseTime = Date.now();\n        const msgTemp = {\n            payload: { value: parseFloat(T), unit: \"°C\", timestamp: baseTime, source: \"DHT11\", team: \"05\"},\n            topic: \"gti700e2025/data/emplacements/equipe05/temperature\"\n        };\n        \n        const msgHumid = {\n            payload: { value: parseFloat(H), unit: \"%\", timestamp: baseTime, source: \"DHT11\", team: \"05\"},\n            topic: \"gti700e2025/data/emplacements/equipe05/humidite\"\n        };\n        \n        node.status({ fill: \"green\", shape: \"dot\", text: ` T:${T}°C H:${H}% ` });\n        return [msgTemp, msgHumid];\n    }\n}\nnode.error(\"Échec parsing: \" + msg.payload);\nnode.status({ fill: \"red\", shape: \"ring\", text: \"Erreur parsing\" });\nreturn null;",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 100,
+        "wires": [
+            [
+                "mqtt_temp_pub"
+            ],
+            [
+                "mqtt_humid_pub"
+            ]
+        ],
+        "outputLabels": [
+            "Temperature",
+            "Humidity"
+        ]
+    },
+    {
+        "id": "mqtt_temp_pub",
+        "type": "mqtt out",
+        "z": "main_flow_tab",
+        "name": "Temp Publisher",
+        "topic": "",
+        "qos": "2",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "6d02e19bcb6e3477",
+        "x": 830,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "mqtt_humid_pub",
+        "type": "mqtt out",
+        "z": "main_flow_tab",
+        "name": "Humid Publisher",
+        "topic": "",
+        "qos": "2",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "6d02e19bcb6e3477",
+        "x": 830,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "mqtt_temp_sub",
+        "type": "mqtt in",
+        "z": "main_flow_tab",
+        "name": "Temp Listener",
+        "topic": "gti700e2025/data/emplacements/+/temperature",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "6d02e19bcb6e3477",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 220,
+        "wires": [
+            [
+                "analytics_engine"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_humid_sub",
+        "type": "mqtt in",
+        "z": "main_flow_tab",
+        "name": "Humid Listener",
+        "topic": "gti700e2025/data/emplacements/+/humidite",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "6d02e19bcb6e3477",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 280,
+        "wires": [
+            [
+                "analytics_engine"
+            ]
+        ]
+    },
+    {
+        "id": "analytics_engine",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "data ",
+        "func": "let teamDatabase = context.get(\"TeamDB\") || {};\nlet analyticsCore = context.get(\"analyticsCore\") || { totalUpdates: 0, lastAnalysis: 0, performance: '' };\n\nconst topicParts = msg.topic.split(\"/\");\nconst teamToken = topicParts[3];\nconst dataType = topicParts[4];\nconst teamId = teamToken.replace(\"equipe\", \"\").padStart(2, \"0\");\n\nif (teamToken === \"equipe05\") return null;\n\nif (!teamDatabase[teamId]) {\n    teamDatabase[teamId] = { temperature: null, humidity: null, lastContact: null, status: 'MONITORING', updateCount: 0, reliability: 'UNKNOWN' };\n}\n\nlet sensorValue;\nif (typeof msg.payload === 'object' && msg.payload.value !== undefined) {\n    sensorValue = parseFloat(msg.payload.value);\n} else {\n    sensorValue = parseFloat(msg.payload);\n}\n\nif (isNaN(sensorValue)) return null;\n\nconst now = Date.now();\nteamDatabase[teamId].lastContact = now;\nteamDatabase[teamId].updateCount++;\n\nif (dataType === \"temperature\") {\n    teamDatabase[teamId].temperature = sensorValue.toFixed(1);\n} else if (dataType === \"humidite\") {\n    teamDatabase[teamId].humidity = sensorValue.toFixed(1);\n}\n\nif (teamDatabase[teamId].temperature !== null && teamDatabase[teamId].humidity !== null) {\n    teamDatabase[teamId].status = 'ACTIVE_COMPLETE';\n    teamDatabase[teamId].reliability = 'HIGH';\n} else {\n    teamDatabase[teamId].status = 'PARTIAL_DATA';\n    teamDatabase[teamId].reliability = 'MEDIUM';\n}\n\ncontext.set(\"TeamDB\", teamDatabase);\n\nconst activeTeams = Object.entries(teamDatabase).filter(\n    ([, data]) => data.temperature !== null && data.humidity !== null\n);\n\nif (activeTeams.length === 0) return null;\n\nconst calculateStats = (values, teamIds) => {\n    const sortedData = values.map((v, i) => ({ val: v, team: teamIds[i] })).sort((a, b) => a.val - b.val);\n    const min = sortedData[0];\n    const max = sortedData[sortedData.length - 1];\n    const sum = values.reduce((a, b) => a + b, 0);\n    const mean = sum / values.length;\n    const variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length;\n    const stdDev = Math.sqrt(variance);\n    const median = values.length % 2 === 0 ? (sortedData[values.length/2 - 1].val + sortedData[values.length/2].val) / 2 : sortedData[Math.floor(values.length/2)].val;\n    \n    return {\n        min, max,\n        mean: mean.toFixed(1),\n        median: median.toFixed(1),\n        stdDev: stdDev.toFixed(2),\n        range: (max.val - min.val).toFixed(1),\n        count: values.length\n    };\n};\n\nconst temperatures = activeTeams.map(([, data]) => parseFloat(data.temperature));\nconst humidities = activeTeams.map(([, data]) => parseFloat(data.humidity));\nconst teamIds = activeTeams.map(([id]) => id);\n\nconst tempAnalysis = calculateStats(temperatures, teamIds);\nconst humidAnalysis = calculateStats(humidities, teamIds);\n\nanalyticsCore.totalUpdates++;\nanalyticsCore.lastAnalysis = now;\nanalyticsCore.activeTeams = activeTeams.length;\nanalyticsCore.performance = activeTeams.length > 10 ? 'EXCELLENT' : 'GOOD';\n\ncontext.set(\"analyticsCore\", analyticsCore);\n\nflow.set(\"groupAnalytics\", {\n    teamData: teamDatabase,\n    tempStats: tempAnalysis,\n    humStats: humidAnalysis,\n    analytics: analyticsCore,\n    lastUpdate: new Date().toISOString()\n});\n\nconst TeamsList = activeTeams.map(([id, data]) => \n    `Équipe ${id}: ${data.temperature}°C, ${data.humidity}% [${data.status}]`\n).join('\\n    ');\n\nmsg.payload = \n    ` === MÉTÉO - RAPPORT  === \\n` +\n    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n` +\n    ` Performance: ${analyticsCore.performance} | Équipes actives: ${analyticsCore.activeTeams}/17\\n` +\n    ` Analyses totales: ${analyticsCore.totalUpdates}\\n\\n` +\n    ` === ANALYSE TEMPÉRATURE  ===\\n` +\n    `    Plage: ${tempAnalysis.min.val}°C [Équipe ${tempAnalysis.min.team}] ➜ ${tempAnalysis.max.val}°C [Équipe ${tempAnalysis.max.team}]\\n` +\n    `     Statistiques: μ=${tempAnalysis.mean}°C, σ=${tempAnalysis.stdDev}°C, médiane=${tempAnalysis.median}°C\\n\\n` +\n    ` === ANALYSE HUMIDITÉ  ===\\n` +\n    `     Plage: ${humidAnalysis.min.val}% [Équipe ${humidAnalysis.min.team}] ➜ ${humidAnalysis.max.val}% [Équipe ${humidAnalysis.max.team}]\\n` +\n    `     Statistiques: μ=${humidAnalysis.mean}%, σ=${humidAnalysis.stdDev}%, médiane=${humidAnalysis.median}%\\n\\n` +\n    ` === STATUS ÉQUIPES  ===\\n    ${TeamsList}\\n` +\n    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 250,
+        "wires": [
+            [
+                "debug_analytics"
+            ]
+        ]
+    },
+    {
+        "id": "debug_analytics",
+        "type": "debug",
+        "z": "main_flow_tab",
+        "name": " Dashboard",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 670,
+        "y": 250,
+        "wires": []
+    },
+    {
+        "id": "weather_timer",
+        "type": "inject",
+        "z": "main_flow_tab",
+        "name": "Intervals 5s",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "source",
+                "v": "Environment Canada",
+                "vt": "str"
+            }
+        ],
+        "repeat": "300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 5,
+        "topic": "",
+        "payload": "WEATHER_REQUEST",
+        "payloadType": "str",
+        "x": 130,
+        "y": 380,
+        "wires": [
+            [
+                "weather_api"
+            ]
+        ]
+    },
+    {
+        "id": "weather_api",
+        "type": "http request",
+        "z": "main_flow_tab",
+        "name": "Environment Canada",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://meteo.gc.ca/rss/city/qc-147_f.xml",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [
+            {
+                "keyType": "User-Agent",
+                "keyValue": "",
+                "valueType": "other",
+                "valueValue": ""
+            }
+        ],
+        "x": 370,
+        "y": 380,
+        "wires": [
+            [
+                "weather_xml_parser"
+            ]
+        ]
+    },
+    {
+        "id": "weather_xml_parser",
+        "type": "xml",
+        "z": "main_flow_tab",
+        "name": "XML Parser",
+        "property": "payload",
+        "attr": "",
+        "chr": "",
+        "x": 570,
+        "y": 380,
+        "wires": [
+            [
+                "weather_processor"
+            ]
+        ]
+    },
+    {
+        "id": "weather_processor",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Weather ",
+        "func": "try {\n    const weatherEntry = msg.payload.feed.entry.find(\n        (entry) => entry.title && entry.title[0].includes(\"Conditions actuelles\")\n    );\n    \n    if (!weatherEntry) {\n        node.warn(\"Aucune donnée météo actuelle trouvée\");\n        return null;\n    }\n\n    const summary = weatherEntry.summary[0][\"_\"];\n    const title = weatherEntry.title[0];\n\n    const patterns = {\n        temperature: /Température:<\\/b>\\s*([\\d,\\-]+)&deg;C/,\n        humidity: /Humidité:<\\/b>\\s*(\\d+)\\s*%/,\n        windSpeed: /Vents:<\\/b>\\s*[A-Z]{0,3}\\s*(\\d+)/,\n        pressure: /Pression:<\\/b>\\s*([\\d,]+)\\s*kPa/,\n        visibility: /Visibilité:<\\/b>\\s*([\\d,]+)\\s*km/\n    };\n\n    const extractData = (pattern) => {\n        const match = pattern.exec(summary);\n        return match ? match[1].replace(',', '.') : null;\n    };\n\n    const temp = extractData(patterns.temperature);\n    const humidity = extractData(patterns.humidity);\n    const windSpeed = extractData(patterns.windSpeed);\n    const pressure = extractData(patterns.pressure);\n    const visibility = extractData(patterns.visibility);\n\n    if (!temp || !humidity || !windSpeed) {\n        node.warn(\"Extraction des données météo essentielles échouée\");\n        return null;\n    }\n\n    const weatherData = {\n        temperature: parseFloat(temp).toFixed(1),\n        humidity: parseFloat(humidity).toFixed(1),\n        windSpeed: parseFloat(windSpeed).toFixed(1),\n        pressure: pressure ? parseFloat(pressure).toFixed(1) : null,\n        visibility: visibility ? parseFloat(visibility).toFixed(1) : null,\n        timestamp: new Date().toISOString(),\n        source: \"Environment Canada\",\n        location: \"Montréal\",\n        updateTime: new Date().toLocaleString('fr-CA')\n    };\n\n    flow.set(\"externalWeather\", weatherData);\n\n    msg.payload = \n        ` === ENVIRONNEMENT CANADA - DONNÉES  === 🇨🇦\\n` +\n        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n` +\n        `Température: ${weatherData.temperature}°C\\n` +\n        `Humidité: ${weatherData.humidity}%\\n` +\n        `Vent: ${weatherData.windSpeed} km/h\\n` +\n        (weatherData.pressure ? ` Pression: ${weatherData.pressure} kPa\\n` : '') +\n        (weatherData.visibility ? `Visibilité: ${weatherData.visibility} km\\n` : '') +\n        ` Mise à jour: ${weatherData.updateTime}\\n` +\n        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;\n\n    node.status({ fill: \"green\", shape: \"dot\", text: ` ${weatherData.temperature}°C` });\n    return msg;\n    \n} catch (error) {\n    node.error(\"Erreur parsing météo: \" + error.message);\n    node.status({ fill: \"red\", shape: \"ring\", text: \"Erreur météo\" });\n    return null;\n}",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 740,
+        "y": 380,
+        "wires": [
+            [
+                "debug_weather"
+            ]
+        ]
+    },
+    {
+        "id": "debug_weather",
+        "type": "debug",
+        "z": "main_flow_tab",
+        "name": "Weather Report",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 990,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "display_timer",
+        "type": "inject",
+        "z": "main_flow_tab",
+        "name": "Interval 5s",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "displayMode",
+                "v": "rotation",
+                "vt": "str"
+            }
+        ],
+        "repeat": "7",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 3,
+        "topic": "",
+        "payload": "DISPLAY_CYCLE",
+        "payloadType": "str",
+        "x": 130,
+        "y": 480,
+        "wires": [
+            [
+                "display_controller"
+            ]
+        ]
+    },
+    {
+        "id": "display_controller",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Display Controller",
+        "func": "let index = context.get(\"index\") || 0;\ncontext.set(\"index\", (index + 1) % 4);\n\nconst self = flow.get(\"localSensorData\") || {};\nconst T = self.temperature || \"--\";\nconst H = self.humidity || \"--\";\n\nconst g = flow.get(\"groupAnalytics\") || {};\nconst Tstats = g.tempStats || {\n  min: { val: 0, team: \"--\" },\n  max: { val: 0, team: \"--\" },\n  mean: \"0.0\",\n};\nconst Hstats = g.humStats || {\n  min: { val: 0, team: \"--\" },\n  max: { val: 0, team: \"--\" },\n  mean: \"0.0\",\n};\n\nconst out = flow.get(\"externalWeather\") || { temperature: \"--\", humidity: \"--\", windSpeed: \"--\" };\n\nlet command = \"python3 /home/gti700lab/Lab3/scripts/lcd_direct.py \";\nlet args = [];\n\nif (index === 0) {\n  if (!T || !H || T === \"--\" || H === \"--\") {\n    args = [\"[1] No data\"];\n  } else {\n    args = [\"local\", Math.round(parseFloat(T)), Math.round(parseFloat(H))];\n  }\n} else if (index === 1) {\n  if (Tstats.min && Tstats.max && Tstats.min.team !== \"--\") {\n    args = [\"full_temp\", Tstats.min.val.toFixed(1), Tstats.min.team, \n            Tstats.max.val.toFixed(1), Tstats.max.team, Tstats.mean, \"extra\"];\n  } else {\n    args = [\"[2] No temp \"];\n  }\n} else if (index === 2) {\n  if (Hstats.min && Hstats.max && Hstats.min.team !== \"--\") {\n    args = [\"full_humid\", Hstats.min.val.toFixed(1), Hstats.min.team, \n      Hstats.max.val.toFixed(1), Hstats.max.team, Hstats.mean, \"extra\"];\n  } else {\n    args = [\"[2] No humid \"];\n  }\n} else if (index === 3) {\n  if (out.temperature !== \"--\" && out.humidity !== \"--\" && out.windSpeed !== \"--\") {\n    args = [\"weather\", Math.round(parseFloat(out.temperature)), Math.round(parseFloat(out.humidity)), Math.round(parseFloat(out.windSpeed))];\n  } else {\n    args = [\"[3] No weather \"];\n  }\n}\n\nconst fullCommand = command + args.map(arg => `\"${arg}\"`).join(\" \");\n\nnode.status({ fill: \"blue\", shape: \"dot\", text: ` Vue ${index + 1}/4:  TempMoyenne ==== >>${Tstats.mean}` });\n\nmsg.payload = fullCommand;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 480,
+        "wires": [
+            [
+                "lcd_executor",
+                "debug_display"
+            ]
+        ]
+    },
+    {
+        "id": "lcd_executor",
+        "type": "exec",
+        "z": "main_flow_tab",
+        "command": "",
+        "addpay": "payload",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "15",
+        "winHide": false,
+        "oldrc": false,
+        "name": "LCD ",
+        "x": 600,
+        "y": 480,
+        "wires": [
+            [
+                "display_success"
+            ],
+            [
+                "display_error"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "display_success",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": " Display Monitor",
+        "func": "const successStats = context.get('displaySuccess') || 0;\ncontext.set('displaySuccess', successStats + 1);\nnode.status({ fill: \"green\", shape: \"dot\", text: ` Display OK (${successStats + 1})` });\nreturn null;",
+        "outputs": 0,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "display_error",
+        "type": "debug",
+        "z": "main_flow_tab",
+        "name": "Display Errors",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 830,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "debug_display",
+        "type": "debug",
+        "z": "main_flow_tab",
+        "name": "Display Commands",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 630,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "api_self",
+        "type": "http in",
+        "z": "main_flow_tab",
+        "name": "/self",
+        "url": "/self",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 600,
+        "wires": [
+            [
+                "api_self_handler"
+            ]
+        ]
+    },
+    {
+        "id": "api_self_handler",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Local Data API",
+        "func": "const localData = flow.get(\"localSensorData\");\n\nif (!localData || localData.temperature == null || localData.humidity == null) {\n    msg.statusCode = 503;\n    msg.payload = { error: \" Service Unavailable\", message: \"Données capteur local indisponibles\", timestamp: new Date().toISOString() };\n    return msg;\n}\n\nmsg.payload = {\n    T: parseFloat(localData.temperature),\n    H: parseFloat(localData.humidity),\n    timestamp: localData.timestamp,\n    quality: localData.quality,\n    source: localData.source,\n    team: \"05\"\n};\n\nmsg.headers = { \"Content-Type\": \"application/json\", \"Cache-Control\": \"no-cache\", \"Access-Control-Allow-Origin\": \"*\", \"Team\": \"05\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 600,
+        "wires": [
+            [
+                "api_response"
+            ]
+        ]
+    },
+    {
+        "id": "api_group",
+        "type": "http in",
+        "z": "main_flow_tab",
+        "name": "/group",
+        "url": "/group",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 660,
+        "wires": [
+            [
+                "api_group_handler"
+            ]
+        ]
+    },
+    {
+        "id": "api_group_handler",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Group Analytics API",
+        "func": "const groupData = flow.get(\"groupAnalytics\");\n\nif (!groupData || !groupData.tempStats || !groupData.humStats) {\n    msg.statusCode = 503;\n    msg.payload = { error: \"Service Unavailable\", message: \"Analytics de groupe indisponibles\", timestamp: new Date().toISOString() };\n    return msg;\n}\n\nconst T = groupData.tempStats;\nconst H = groupData.humStats;\n\nmsg.payload = {\n    Tstats: {\n        min: { val: parseFloat(T.min.val), team: T.min.team },\n        max: { val: parseFloat(T.max.val), team: T.max.team },\n        moy: parseFloat(T.mean)\n    },\n    Hstats: {\n        min: { val: parseFloat(H.min.val), team: H.min.team },\n        max: { val: parseFloat(H.max.val), team: H.max.team },\n        moy: parseFloat(H.mean)\n    },\n    analytics: groupData.analytics,\n    lastUpdate: groupData.lastUpdate\n};\n\nmsg.headers = { \"Content-Type\": \"application/json\", \"Cache-Control\": \"max-age=30\", \"Access-Control-Allow-Origin\": \"*\", \"Team\": \"05\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 660,
+        "wires": [
+            [
+                "api_response"
+            ]
+        ]
+    },
+    {
+        "id": "api_team",
+        "type": "http in",
+        "z": "main_flow_tab",
+        "name": " /group/:team",
+        "url": "/group/:team",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 720,
+        "wires": [
+            [
+                "api_team_handler"
+            ]
+        ]
+    },
+    {
+        "id": "api_team_handler",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Team Data API",
+        "func": "const teamParam = msg.req.params.team;\nconst teamId = teamParam.toString().padStart(2, \"0\");\nconst groupData = flow.get(\"groupAnalytics\");\n\nif (!groupData || !groupData.teamData) {\n    msg.statusCode = 503;\n    msg.payload = { error: \" Service Unavailable\", message: \"Données équipe indisponibles\" };\n    return msg;\n}\n\nconst teamData = groupData.teamData[teamId];\n\nif (!teamData || teamData.temperature === null || teamData.humidity === null) {\n    msg.statusCode = 404;\n    msg.payload = { error: \"Team Not Found\", message: `Aucune donnée disponible pour l'équipe ${teamParam}`, teamId: teamId };\n    return msg;\n}\n\nmsg.payload = {\n    xy: teamId,\n    T: parseFloat(teamData.temperature),\n    H: parseFloat(teamData.humidity),\n    lastSeen: teamData.lastContact,\n    status: teamData.status,\n    reliability: teamData.reliability\n};\n\nmsg.headers = { \"Content-Type\": \"application/json\", \"Access-Control-Allow-Origin\": \"*\", \"Team\": \"05\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 720,
+        "wires": [
+            [
+                "api_response"
+            ]
+        ]
+    },
+    {
+        "id": "api_outside",
+        "type": "http in",
+        "z": "main_flow_tab",
+        "name": "/outside",
+        "url": "/outside",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 110,
+        "y": 780,
+        "wires": [
+            [
+                "api_outside_handler"
+            ]
+        ]
+    },
+    {
+        "id": "api_outside_handler",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": " Weather Data API",
+        "func": "const weatherData = flow.get(\"externalWeather\");\n\nif (!weatherData || weatherData.temperature == null) {\n    msg.statusCode = 503;\n    msg.payload = { error: \" Service Unavailable\", message: \"Données météo externes indisponibles\", timestamp: new Date().toISOString() };\n    return msg;\n}\n\nmsg.payload = {\n    T: parseFloat(weatherData.temperature),\n    H: parseFloat(weatherData.humidity),\n    V: parseFloat(weatherData.windSpeed),\n    pressure: weatherData.pressure ? parseFloat(weatherData.pressure) : null,\n    visibility: weatherData.visibility ? parseFloat(weatherData.visibility) : null,\n    conditions: weatherData.conditions,\n    source: weatherData.source,\n    location: weatherData.location,\n    timestamp: weatherData.timestamp\n};\n\nmsg.headers = { \"Content-Type\": \"application/json\", \"Cache-Control\": \"max-age=300\", \"Access-Control-Allow-Origin\": \"*\", \"Team\": \"05\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 780,
+        "wires": [
+            [
+                "api_response"
+            ]
+        ]
+    },
+    {
+        "id": "api_dashboard",
+        "type": "http in",
+        "z": "main_flow_tab",
+        "name": "Web Interface /web",
+        "url": "/web",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 840,
+        "wires": [
+            [
+                "api_dashboard_handler"
+            ]
+        ]
+    },
+    {
+        "id": "api_dashboard_handler",
+        "type": "function",
+        "z": "main_flow_tab",
+        "name": "Web Dashboard",
+        "func": "const localData = flow.get(\"localSensorData\") || { temperature: \"--\", humidity: \"--\", quality: \"\" };\nconst groupData = flow.get(\"groupAnalytics\") || { teamData: {}, tempStats: {}, humStats: {}, analytics: {} };\nconst weatherData = flow.get(\"externalWeather\") || { temperature: \"--\", humidity: \"--\", windSpeed: \"--\" };\n\nconst teamData = groupData.teamData || {};\nconst tempStats = groupData.tempStats || {};\nconst humStats = groupData.humStats || {};\nconst analytics = groupData.analytics || {};\n\nlet html = `<!DOCTYPE html>\n<html lang=\"fr\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Dashboard Météo - Équipe 05</title>\n  <style>\n    body {\n      font-family: Arial, sans-serif;\n      background: #f5f5f5;\n      color: #333;\n      margin: 0;\n      padding: 20px;\n    }\n    .container { max-width: 1200px; margin: 0 auto; }\n    h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }\n    .dashboard {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));\n      gap: 20px;\n    }\n    .card {\n      background: white;\n      border: 1px solid #ddd;\n      border-radius: 10px;\n      padding: 20px;\n      box-shadow: 0 2px 5px rgba(0,0,0,0.1);\n    }\n    .card h3 { color: #2c3e50; margin-bottom: 15px; }\n    .metric {\n      display: flex;\n      justify-content: space-between;\n      margin: 10px 0;\n      padding: 5px 0;\n      border-bottom: 1px solid #eee;\n    }\n    .metric:last-child { border-bottom: none; }\n    .temp { color: #e74c3c; font-weight: bold; }\n    .humidity { color: #3498db; font-weight: bold; }\n    .team-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n      gap: 15px;\n      margin-top: 15px;\n    }\n    .team-item {\n      background: #f8f9fa;\n      padding: 15px;\n      border-radius: 8px;\n      border-left: 3px solid #2c3e50;\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <h1>Dashboard Météo - Équipe 05</h1>\n    \n    <div class=\"dashboard\">\n      <!-- Capteur Local -->\n      <div class=\"card\">\n        <h3>Capteur Local</h3>\n        <div class=\"metric\">\n          <span>Température:</span>\n          <span class=\"temp\">${localData.temperature}°C</span>\n        </div>\n        <div class=\"metric\">\n          <span>Humidité:</span>\n          <span class=\"humidity\">${localData.humidity}%</span>\n        </div>\n      </div>\n\n      <!-- Stats Température -->\n      <div class=\"card\">\n        <h3>Température - Statistiques</h3>\n        <div class=\"metric\">\n          <span>Maximum:</span>\n          <span class=\"temp\">${tempStats.max?.val || '--'}°C</span>\n        </div>\n        <div class=\"metric\">\n          <span>Minimum:</span>\n          <span class=\"temp\">${tempStats.min?.val || '--'}°C</span>\n        </div>\n        <div class=\"metric\">\n          <span>Moyenne:</span>\n          <span class=\"temp\">${tempStats.mean || '--'}°C</span>\n        </div>\n        <div class=\"metric\">\n          <span>Équipes actives:</span>\n          <span>${tempStats.count || 0}/17</span>\n        </div>\n      </div>\n\n      <!-- Stats Humidité -->\n      <div class=\"card\">\n        <h3>Humidité - Statistiques</h3>\n        <div class=\"metric\">\n          <span>Maximum:</span>\n          <span class=\"humidity\">${humStats.max?.val || '--'}%</span>\n        </div>\n        <div class=\"metric\">\n          <span>Minimum:</span>\n          <span class=\"humidity\">${humStats.min?.val || '--'}%</span>\n        </div>\n        <div class=\"metric\">\n          <span>Moyenne:</span>\n          <span class=\"humidity\">${humStats.mean || '--'}%</span>\n        </div>\n        <div class=\"metric\">\n          <span>Équipes actives:</span>\n          <span>${humStats.count || 0}/17</span>\n        </div>\n      </div>\n\n      <!-- Météo Externe -->\n      <div class=\"card\">\n        <h3>Météo Externe</h3>\n        <div class=\"metric\">\n          <span>Température:</span>\n          <span class=\"temp\">${weatherData.temperature}°C</span>\n        </div>\n        <div class=\"metric\">\n          <span>Humidité:</span>\n          <span class=\"humidity\">${weatherData.humidity}%</span>\n        </div>\n        <div class=\"metric\">\n          <span>Vent:</span>\n          <span>${weatherData.windSpeed} km/h</span>\n        </div>\n      </div>\n\n      <!-- Équipes -->\n      <div class=\"card\">\n        <h3>Équipes</h3>\n        <div class=\"team-grid\">\n          ${Object.entries(teamData).map(([id, data]) => `\n            <div class=\"team-item\">\n              <div><strong>Équipe ${id}</strong></div>\n              <div>T: ${data.temperature || '--'}°C</div>\n              <div>H: ${data.humidity || '--'}%</div>\n            </div>\n          `).join('')}\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <script>\n    setTimeout(() => { location.reload(); }, 30000);\n  </script>\n</body>\n</html>`;\n\nmsg.payload = html;\nmsg.headers = { \"Content-Type\": \"text/html; charset=utf-8\", \"Cache-Control\": \"no-cache\", \"Team\": \"05\" };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 840,
+        "wires": [
+            [
+                "api_response"
+            ]
+        ]
+    },
+    {
+        "id": "api_response",
+        "type": "http response",
+        "z": "main_flow_tab",
+        "name": "HTTP Response",
+        "statusCode": "",
+        "headers": {},
+        "x": 590,
+        "y": 720,
+        "wires": []
+    },
+    {
+        "id": "6d02e19bcb6e3477",
+        "type": "mqtt-broker",
+        "name": "HiveMQ public",
+        "broker": "broker.hivemq.com",
+        "port": 1883,
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]

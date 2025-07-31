@@ -1,0 +1,69 @@
+{
+    "project": {
+        "name": "Station Météorologique IoT",
+        "version": "1.0.0",
+        "team_number": "05",
+        "description": "Laboratoire 3 - GTI700 E2025"
+    },
+    "hardware": {
+        "raspberry_pi": {
+            "model": "Raspberry Pi 4B",
+            "os": "Raspberry Pi OS"
+        },
+        "sensors": {
+            "dht22": {
+                "pin": 4,
+                "type": "DHT22",
+                "description": "Capteur température et humidité"
+            }
+        },
+        "display": {
+            "lcd": {
+                "type": "HD44780",
+                "size": "16x2",
+                "interface": "I2C",
+                "address": "0x27",
+                "description": "Écran LCD 16x2 avec interface I2C"
+            }
+        }
+    },
+    "communication": {
+        "mqtt": {
+            "broker": "broker.hivemq.com",
+            "port": 1883,
+            "topics": {
+                "base": "gti700e2025/data/emplacements",
+                "temperature": "gti700e2025/data/emplacements/equipeXX/temperature", 
+                "humidity": "gti700e2025/data/emplacements/equipeXX/humidite",
+                "wildcard": "gti700e2025/data/emplacements/+/+"
+            }
+        },
+        "web_service": {
+            "port": 1880,
+            "endpoints": [
+                "/self",
+                "/group", 
+                "/group/:team",
+                "/outside",
+                "/"
+            ]
+        },
+        "external_apis": {
+            "environment_canada": {
+                "url": "https://meteo.gc.ca/rss/city/qc-147_f.xml",
+                "format": "XML/RSS",
+                "update_interval": 20
+            }
+        }
+    },
+    "timing": {
+        "sensor_reading": 3,
+        "environment_canada": 20, 
+        "lcd_rotation": 5
+    },
+    "paths": {
+        "scripts": "/home/pi/Lab3/scripts",
+        "node_red": "/home/pi/Lab3/node-red",
+        "docs": "/home/pi/Lab3/docs"
+    }
+} 
